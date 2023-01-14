@@ -22,19 +22,9 @@ struct Physics
 	Vector3 velocity = {0.0f,0.0f,0.0f};
 };
 
-struct CubeMesh
-{
-	Color tint = WHITE;
-};
-
 struct CubeCollision
 {
 	BoundingBox bounds = {}; // TODO: Some default?
-};
-
-struct SphereMesh
-{
-	Color tint = WHITE;
 };
 
 constexpr r32 cDefaultSphereRadius = 10.0f;
@@ -106,6 +96,8 @@ inline Vector3 RandomVec3InBoundingBox(BoundingBox bounds)
 
 Model LoadModelWithTextures(const char *meshFile, const char *albedoFile, const char *normalMapFile)
 {
+	OPTICK_EVENT();
+
 	Model model = LoadModel(meshFile);
 	if(albedoFile)
 	{
@@ -122,6 +114,8 @@ Model LoadModelWithTextures(const char *meshFile, const char *albedoFile, const 
 
 std::vector<Model> LoadAsteroidModels()
 {
+	OPTICK_EVENT();
+
 	std::vector<Model> asteroidModels;
 	asteroidModels.push_back(LoadModelWithTextures("asteroids/asteroid_small_1.obj", "asteroids/asteroid_small_1_color.png", "asteroids/asteroid_small_1_nm.png"));
 	asteroidModels.push_back(LoadModelWithTextures("asteroids/asteroid_small_2.obj", "asteroids/asteroid_small_2_color.png", "asteroids/asteroid_small_2_nm.png"));
@@ -136,6 +130,8 @@ std::vector<Model> LoadAsteroidModels()
 Game::Game(u32 windowWidth, u32 windowHeight)
 	: m_windowWidth(windowWidth), m_windowHeight(windowHeight)
 {
+	OPTICK_EVENT();
+
 	std::vector<Color> colors = {
 		LIGHTGRAY, GRAY, DARKGRAY, YELLOW, GOLD, ORANGE, PINK, RED, MAROON, GREEN, LIME, DARKGREEN,
 		SKYBLUE, BLUE, DARKBLUE, PURPLE, VIOLET, DARKPURPLE, BEIGE, BROWN, DARKBROWN, BLACK
@@ -245,7 +241,7 @@ Game::~Game()
 
 void Game::UpdateAndDraw()
 {
-	OPTICK_FRAME("MainThread");
+	OPTICK_EVENT();
 
 	r64 frameTime = GetTime();
 	r32 dt = (r32)(frameTime - m_lastFrameTime);
@@ -256,6 +252,8 @@ void Game::UpdateAndDraw()
 
 	// Read input and map to actions
 	{
+		OPTICK_EVENT("UpdateShipInput");
+
 		auto view = m_registry.view<ShipInput>();
 		view.each([](ShipInput &shipInput) {
 
@@ -291,6 +289,8 @@ void Game::UpdateAndDraw()
 
 	// Update ship transform based of current ship input
 	{
+		OPTICK_EVENT("UpdateShipTransform");
+
 		auto view = m_registry.view<const ShipInput, const ShipConfig, Transform>();
 		view.each([dt](const ShipInput &shipInput, const ShipConfig shipConfig, Transform &transform) {
 			// Movement
@@ -315,6 +315,8 @@ void Game::UpdateAndDraw()
 
 	// Update Camera by attached transform
 	{
+		OPTICK_EVENT("UpdateCamera");
+
 		auto view = m_registry.view<const Transform, CameraArm, Camera>();
 		view.each([](const Transform &transform, CameraArm &cameraArm, Camera &camera) {
 			
@@ -381,41 +383,36 @@ void Game::UpdateAndDraw()
 	BeginMode3D(camera);
 	// Draw asteroids
 	{
-		auto modelView = m_registry.view<const Transform, const Model>();
-		modelView.each([](const Transform &transform, const Model &model) {
-			Vector3 rotationAxis = {0.0f, 0.0f, 0.0f};
-			r32 rotationAngle = 0.0f;
-			QuaternionToAxisAngle(transform.rotation, &rotationAxis, &rotationAngle);
-			rotationAngle *= RAD2DEG;
-			DrawModelEx(model, transform.translation, rotationAxis, rotationAngle, transform.scale, WHITE);
-			//DrawModelWiresEx(model, transform.translation, rotationAxis, rotationAngle, transform.scale, WHITE);
-		});
-
-		if(debugFlags.drawCollision)
+		OPTICK_EVENT("Draw");
 		{
-			auto debugCollisionView = m_registry.view<const SphereCollision, const Transform>();
-			debugCollisionView.each([](const SphereCollision &sphereCollision, const Transform &transform)
-			{
-				constexpr u32 rings = 5;
-				constexpr u32 slices = 12;
-				Vector3 rotatedOffset = Vector3RotateByQuaternion(sphereCollision.offset, transform.rotation);
-				Vector3 position = Vector3Add(transform.translation, rotatedOffset);
-				DrawSphereWires(position, sphereCollision.radius, rings, slices, LIME);
+			OPTICK_EVENT("DrawModels");
+
+			auto modelView = m_registry.view<const Transform, const Model>();
+			modelView.each([](const Transform &transform, const Model &model) {
+				Vector3 rotationAxis = {0.0f, 0.0f, 0.0f};
+				r32 rotationAngle = 0.0f;
+				QuaternionToAxisAngle(transform.rotation, &rotationAxis, &rotationAngle);
+				rotationAngle *= RAD2DEG;
+				DrawModelEx(model, transform.translation, rotationAxis, rotationAngle, transform.scale, WHITE);
+				//DrawModelWiresEx(model, transform.translation, rotationAxis, rotationAngle, transform.scale, WHITE);
 			});
 		}
 
-
-		auto cubeView = m_registry.view<const Transform, const CubeMesh>();
-		cubeView.each([](const Transform &transform, const CubeMesh &mesh) {
-			DrawCubeV(transform.translation, transform.scale, mesh.tint);
-		});
-
-		auto sphereView = m_registry.view<const Transform, const SphereMesh>();
-		sphereView.each([](const Transform &transform, const SphereMesh &mesh) {
-			constexpr u32 rings = 6;
-			constexpr u32 slices = 8;
-			DrawSphereEx(transform.translation, transform.scale.x, rings, slices, mesh.tint);
-		});
+		{
+			if(debugFlags.drawCollision)
+			{
+				OPTICK_EVENT("DrawSphereCollision");
+				auto debugCollisionView = m_registry.view<const SphereCollision, const Transform>();
+				debugCollisionView.each([](const SphereCollision &sphereCollision, const Transform &transform)
+				{
+					constexpr u32 rings = 5;
+					constexpr u32 slices = 12;
+					Vector3 rotatedOffset = Vector3RotateByQuaternion(sphereCollision.offset, transform.rotation);
+					Vector3 position = Vector3Add(transform.translation, rotatedOffset);
+					DrawSphereWires(position, sphereCollision.radius, rings, slices, LIME);
+				});
+			}
+		}
 	}
 	EndMode3D();
 

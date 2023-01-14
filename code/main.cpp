@@ -5,6 +5,8 @@
 #include "raylib.h"
 #include "raymath.h"
 
+#include "optick/optick.h"
+
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
 #endif
@@ -20,6 +22,8 @@ static void UpdateAndDrawWeb(void *context)
 
 int main(void)
 {
+	OPTICK_START_CAPTURE();
+
 	TraceLog(LOG_INFO, "WorkDir = %s", GetWorkingDirectory());
 	
 	const u32 windowWidth = 1600;
@@ -52,15 +56,21 @@ int main(void)
 #else
 	while(!WindowShouldClose())
 	{
+		OPTICK_FRAME("MainThread");
+
 		game.UpdateAndDraw();
 	}
 #endif
+	
 	
 	//UnloadFont(font);
 	//UnloadMusicStream(music);
 
 	CloseAudioDevice();
 	CloseWindow();
+
+	OPTICK_STOP_CAPTURE();
+	OPTICK_SAVE_CAPTURE("profileCapture.opt");
 
 	return 0;
 }
