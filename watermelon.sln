@@ -5,6 +5,8 @@ VisualStudioVersion = 17.4.33110.190
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "watermelon", "watermelon.vcxproj", "{A359F94D-0123-49BA-9B91-31F32E84D8EE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "raylib", "raylib.vcxproj", "{E89D61AC-55DE-4482-AFD4-DF7242EBC859}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		debug|x64 = debug|x64
@@ -15,6 +17,10 @@ Global
 		{A359F94D-0123-49BA-9B91-31F32E84D8EE}.debug|x64.Build.0 = debug|x64
 		{A359F94D-0123-49BA-9B91-31F32E84D8EE}.release|x64.ActiveCfg = release|x64
 		{A359F94D-0123-49BA-9B91-31F32E84D8EE}.release|x64.Build.0 = release|x64
+		{E89D61AC-55DE-4482-AFD4-DF7242EBC859}.debug|x64.ActiveCfg = debug|x64
+		{E89D61AC-55DE-4482-AFD4-DF7242EBC859}.debug|x64.Build.0 = debug|x64
+		{E89D61AC-55DE-4482-AFD4-DF7242EBC859}.release|x64.ActiveCfg = release|x64
+		{E89D61AC-55DE-4482-AFD4-DF7242EBC859}.release|x64.Build.0 = release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
