@@ -2,7 +2,34 @@
 
 #include "defines.h"
 
-#include "external/entt.hpp"
+class PhysicsWorld;
+
+struct ShipInput
+{
+	enum Action
+	{
+		THRUST_X,
+		THRUST_Y,
+		THRUST_Z,
+		PITCH, // X Axis
+		YAW, // Y Axis
+		ROLL, // Z Axis
+
+		FIRE,
+		ALT_FIRE,
+
+		ACTION_TOTAL
+	};
+	r32 inputs[ACTION_TOTAL] = {};
+};
+
+struct ShipConfig
+{
+	r32 thrustSpeed = 20.0f;
+	r32 pitchRate = 5.0f;
+	r32 yawRate = 5.0f;
+	r32 rollRate = 30.0f;
+};
 
 class Game
 {
@@ -19,6 +46,8 @@ private:
 
 	std::vector<entt::entity> m_entities;
 	entt::entity m_playerEntity = entt::null;
+
+	PhysicsWorld *m_physics;
 
 	r64 m_lastFrameTime = 0;
 

@@ -3,36 +3,18 @@
 #include "raylib.h"
 #include "raymath.h"
 
-
-#include "optick/optick.h"
+#include "physics.h"
+#include "shipPhysics.h"
 
 constexpr Vector3 Vec3Zero = {0.0f, 0.0f, 0.0f};
 constexpr Vector3 Vec3Up = {0.0f, 1.0f, 0.0f};
 constexpr Vector3 Vec3Down = {0.0f, -1.0f, 0.0f};
-constexpr Vector3 Vec3Forward = {0.0f, 0.0f, 1.0f};
-constexpr Vector3 Vec3Back = {0.0f, 0.0f, -1.0f};
+constexpr Vector3 Vec3Forward = {0.0f, 0.0f, -1.0f};
+constexpr Vector3 Vec3Back = {0.0f, 0.0f, 1.0f};
 constexpr Vector3 Vec3Left = {-1.0f, 0.0f, 0.0f};
 constexpr Vector3 Vec3Right = {1.0f, 0.0f, 0.0f};
 
 constexpr Quaternion QuatIdentity = {0.0f, 0.0f, 0.0f, 1.0f};
-
-
-struct Physics
-{
-	Vector3 velocity = {0.0f,0.0f,0.0f};
-};
-
-struct CubeCollision
-{
-	BoundingBox bounds = {}; // TODO: Some default?
-};
-
-constexpr r32 cDefaultSphereRadius = 10.0f;
-struct SphereCollision
-{
-	Vector3 offset = Vec3Zero;
-	r32 radius = cDefaultSphereRadius;
-};
 
 struct CameraArm
 {
@@ -49,7 +31,7 @@ struct CameraArm
 	CameraArm(Vector3 cameraOffset)
 	{
 		baseDir = Vector3Normalize(cameraOffset);
-		baseUp = Vector3Negate(Vector3CrossProduct(baseDir, Vec3Right));
+		baseUp = Vector3Negate(Vector3CrossProduct(baseDir, Vec3Left));
 		currentDistance = Vector3Length(cameraOffset);
 		currentRotation = QuatIdentity;//QuaternionFromVector3ToVector3(Vec3Back, baseDir);
 
@@ -58,30 +40,7 @@ struct CameraArm
 	};
 };
 
-struct ShipInput
-{
-	enum Action
-	{
-		THRUST,
-		PITCH, // X Axis
-		YAW, // Y Axis
-		ROLL, // Z Axis
 
-		FIRE,
-		ALT_FIRE,
-
-		ACTION_TOTAL
-	};
-	r32 inputs[ACTION_TOTAL] = {};
-};
-
-struct ShipConfig
-{
-	r32 thrustSpeed = 80.0f;
-	r32 pitchRate = 25.0f;
-	r32 yawRate = 25.0f;
-	r32 rollRate = 30.0f;
-};
 
 
 inline Vector3 RandomVec3InBoundingBox(BoundingBox bounds)
@@ -127,10 +86,26 @@ std::vector<Model> LoadAsteroidModels()
 }
 
 
+std::vector<btConvexShape *> CreateAsteroidCollisions(const std::vector<Model> &asteroidModels, r32 scale)
+{
+	std::vector<btConvexShape *> asteroidCollisions;
+
+	for(const Model &model : asteroidModels)
+	{
+		btConvexShape * collisionShapes = CreateConvexCollision(model, scale);
+		asteroidCollisions.push_back(collisionShapes);
+	}
+	Assert(asteroidCollisions.size() == asteroidModels.size());
+
+	return asteroidCollisions;
+}
+
 Game::Game(u32 windowWidth, u32 windowHeight)
 	: m_windowWidth(windowWidth), m_windowHeight(windowHeight)
 {
 	OPTICK_EVENT();
+
+	m_physics = new PhysicsWorld();
 
 	std::vector<Color> colors = {
 		LIGHTGRAY, GRAY, DARKGRAY, YELLOW, GOLD, ORANGE, PINK, RED, MAROON, GREEN, LIME, DARKGREEN,
@@ -148,50 +123,51 @@ Game::Game(u32 windowWidth, u32 windowHeight)
 
 		m_registry.emplace<Transform>(m_playerEntity, transform);
 
-		SphereCollision sphereCollision;
-		sphereCollision.radius = 1.75f;
-		sphereCollision.offset.y = 1.0f;
-		m_registry.emplace<SphereCollision>(m_playerEntity, sphereCollision);
-
 		Model shipModel = LoadModelWithTextures("ship/pirate-ship-blender-v2.obj", "ship/pirate-ship-blender-v2.png", nullptr);
+		shipModel.transform = MatrixRotateY(180.0f * DEG2RAD);
 		m_registry.emplace<Model>(m_playerEntity, shipModel);
-
+		
 		m_registry.emplace<ShipInput>(m_playerEntity); // Reads from global input and maps to ship movement inputs
 
 		ShipConfig shipConfig; // Using default initialised values
 		m_registry.emplace<ShipConfig>(m_playerEntity, shipConfig);
 
+		r32 collisionRadius = 1.0f;
+		r32 collisionLength = 2.5f;
+		//btConvexShape *shipCollision = CreateCapsuleZAxisCollision(collisionRadius, collisionLength);
+		btConvexShape *shipCollision = CreateCylinderZAxisCollision(collisionRadius, collisionLength);
+		btPairCachingGhostObject *ghostObject = m_physics->CreateGhostObject(shipCollision);
+		ShipPhysics &shipPhyics = m_registry.emplace<ShipPhysics>(m_playerEntity, shipCollision, ghostObject, shipConfig);
+		m_physics->AddAction((btActionInterface *)&shipPhyics);
+
 		Camera camera;
 		camera.position = {0.0f, 0.0f, 0.0f};
-		camera.target = {0.0f, 0.0f, 1.0f};
+		camera.target = Vec3Forward;
 		camera.up = {0.0f, 1.0f, 0.0f};
 		camera.fovy = 45.0f;
 		camera.projection = CAMERA_PERSPECTIVE;
 		
 		m_registry.emplace<Camera>(m_playerEntity, camera);
 
-		Vector3 cameraArmOffsetVec = {-2.5, 3.0f, -10.0f};
+		Vector3 cameraArmOffsetVec = { 2.5f, 3.0f, 10.0f };
 		CameraArm cameraArm(cameraArmOffsetVec);
 		m_registry.emplace<CameraArm>(m_playerEntity, cameraArm);
 	}
 
 	std::vector<Model> asteroidModels = LoadAsteroidModels();
 
-	BoundingBox asteroidPositionBounds = {};
-	asteroidPositionBounds.min.x = -500.0;
-	asteroidPositionBounds.max.x = 500.0;
-	asteroidPositionBounds.min.y = -500.0;
-	asteroidPositionBounds.max.y = 500.0;
-	asteroidPositionBounds.min.z = -500.0;
-	asteroidPositionBounds.max.z = 500.0;
-
 	r32 asteroidScale = 10.0f;
-	r32 asteroidCollisionRadius = 7.5f;
+	std::vector<btConvexShape *> asteroidCollisions = CreateAsteroidCollisions(asteroidModels, asteroidScale);
 
-	//constexpr u32 minSpeed = 10;
-	//constexpr u32 maxSpeed = 100;
+	BoundingBox asteroidPositionBounds = {};
+	asteroidPositionBounds.min.x = -200.0;
+	asteroidPositionBounds.max.x = 200.0;
+	asteroidPositionBounds.min.y = -200.0;
+	asteroidPositionBounds.max.y = 200.0;
+	asteroidPositionBounds.min.z = -200.0;
+	asteroidPositionBounds.max.z = 200.0;
 
-	constexpr u32 asteroidsToCreate = 300;
+	constexpr u32 asteroidsToCreate = 200;
 	for(u32 entityNum = 0; entityNum < asteroidsToCreate; ++entityNum)
 	{
 		entt::entity entity = m_registry.create();
@@ -207,21 +183,14 @@ Game::Game(u32 windowWidth, u32 windowHeight)
 
 		m_registry.emplace<Transform>(entity, translation, rotation, scale);
 
-		//Vector3 direction = {};
-		//direction.x = (r32)GetRandomValue(-1000, 1000);
-		//direction.y = (r32)GetRandomValue(-1000, 1000);
-		//direction = Vector3Normalize(direction);
-
-		//r32 speed = (r32)GetRandomValue(minSpeed, maxSpeed);
-		//Vector3 velocity = Vector3Scale(direction, speed);
-
-		//m_registry.emplace<Physics>(entity, velocity);
-
-		SphereCollision sphereCollision;
-		sphereCollision.radius = asteroidCollisionRadius;
-		m_registry.emplace<SphereCollision>(entity, sphereCollision);
+		r32 mass = 10.0f;
 
 		u32 randAsteroidNum = GetRandomValue(0, (u32)asteroidModels.size() - 1);
+		btConvexShape *collisionShape = asteroidCollisions.at(randAsteroidNum);
+
+		RigidBody rigidBody = m_physics->CreateRigidBody(translation, rotation, mass, collisionShape);
+		m_registry.emplace<RigidBody>(entity, rigidBody);
+
 		m_registry.emplace<Model>(entity, asteroidModels.at(randAsteroidNum));
 
 		m_entities.push_back(entity);
@@ -249,7 +218,6 @@ void Game::UpdateAndDraw()
 
 	if(IsKeyPressed(KEY_F1)) { debugFlags.drawCollision = !debugFlags.drawCollision; }
 
-
 	// Read input and map to actions
 	{
 		OPTICK_EVENT("UpdateShipInput");
@@ -262,54 +230,55 @@ void Game::UpdateAndDraw()
 			constexpr r32 mouseSensitivity = 0.15f;
 			mouseDelta = Vector2Scale(mouseDelta, mouseSensitivity);
 
-			shipInput.inputs[ShipInput::THRUST] = 0.0f;
-			if(IsKeyDown(KEY_W)) { shipInput.inputs[ShipInput::THRUST] += 1.0f; }
-			if(IsKeyDown(KEY_S)) { shipInput.inputs[ShipInput::THRUST] -= 1.0f; }
+			shipInput.inputs[ShipInput::THRUST_Z] = 0.0f;
+			if(IsKeyDown(KEY_W)) { shipInput.inputs[ShipInput::THRUST_Z] -= 1.0f; }
+			if(IsKeyDown(KEY_S)) { shipInput.inputs[ShipInput::THRUST_Z] += 1.0f; }
+
+			shipInput.inputs[ShipInput::THRUST_X] = 0.0f;
+			if(IsKeyDown(KEY_A)) { shipInput.inputs[ShipInput::THRUST_X] -= 1.0f; }
+			if(IsKeyDown(KEY_D)) { shipInput.inputs[ShipInput::THRUST_X] += 1.0f; }
+
+			shipInput.inputs[ShipInput::THRUST_Y] = 0.0f;
+			if(IsKeyDown(KEY_LEFT_SHIFT)) { shipInput.inputs[ShipInput::THRUST_Y] += 1.0f; }
+			if(IsKeyDown(KEY_LEFT_CONTROL)) { shipInput.inputs[ShipInput::THRUST_Y] -= 1.0f; }
 
 			shipInput.inputs[ShipInput::PITCH] = 0.0f;
 			shipInput.inputs[ShipInput::YAW] = 0.0f;
 			shipInput.inputs[ShipInput::ROLL] = 0.0f;
 
-			//shipInput.inputs[ShipInput::PITCH] = mouseDelta.y;
-			//shipInput.inputs[ShipInput::YAW] = -mouseDelta.x;
+			shipInput.inputs[ShipInput::PITCH] = -mouseDelta.y;
+			shipInput.inputs[ShipInput::YAW] = -mouseDelta.x;
 
-			if(IsKeyDown(KEY_UP)) { shipInput.inputs[ShipInput::PITCH] += 1.0f; }
-			if(IsKeyDown(KEY_DOWN)) { shipInput.inputs[ShipInput::PITCH] -= 1.0f; }
-
-			if(IsKeyDown(KEY_A)) { shipInput.inputs[ShipInput::YAW] += 1.0f; }
-			if(IsKeyDown(KEY_D)) { shipInput.inputs[ShipInput::YAW] -= 1.0f; }
-
-			if(IsKeyDown(KEY_LEFT)) { shipInput.inputs[ShipInput::ROLL] -= 1.0f; }
-			if(IsKeyDown(KEY_RIGHT)) { shipInput.inputs[ShipInput::ROLL] += 1.0f; }
+			if(IsKeyDown(KEY_Q)) { shipInput.inputs[ShipInput::ROLL] += 1.0f; }
+			if(IsKeyDown(KEY_E)) { shipInput.inputs[ShipInput::ROLL] -= 1.0f; }
 
 			if(IsKeyPressed(MOUSE_BUTTON_LEFT)) { shipInput.inputs[ShipInput::FIRE] = 1.0f; }
 			if(IsKeyPressed(MOUSE_BUTTON_RIGHT)) { shipInput.inputs[ShipInput::ALT_FIRE] = 1.0f; }
 		});
 	}
 
-	// Update ship transform based of current ship input
+	// Update ship physics based of current ship input
 	{
-		OPTICK_EVENT("UpdateShipTransform");
+		OPTICK_EVENT("ApplyShipInput");
+		auto view = m_registry.view<const ShipInput, const ShipConfig, ShipPhysics>();
+		view.each([dt, this](const ShipInput &shipInput, const ShipConfig &shipConfig, ShipPhysics &shipPhysics) {
+			shipPhysics.ApplyShipInput(shipInput);
+		});
+	}
 
-		auto view = m_registry.view<const ShipInput, const ShipConfig, Transform>();
-		view.each([dt](const ShipInput &shipInput, const ShipConfig shipConfig, Transform &transform) {
-			// Movement
-			Vector3 faceDir = Vector3RotateByQuaternion(Vec3Forward, transform.rotation);
+	m_physics->Step(dt);
 
-			r32 moveDelta = shipInput.inputs[ShipInput::THRUST] * shipConfig.thrustSpeed * dt;
-			Vector3 moveVector = Vector3Scale(faceDir, moveDelta);
-			transform.translation = Vector3Add(transform.translation, moveVector);
+	// Apply physics update to our transforms
+	{
+		OPTICK_EVENT("UpdateTransforms")
+		auto view = m_registry.view<const RigidBody, Transform>();
+		view.each([this](const RigidBody &rigidBody, Transform &transform) {
+			m_physics->UpdateTransform(rigidBody, transform);
+		});
 
-			// Rotation
-			r32 pitchDegrees = shipInput.inputs[ShipInput::PITCH] * shipConfig.pitchRate * dt;
-			r32 yawDegrees = shipInput.inputs[ShipInput::YAW] * shipConfig.yawRate * dt;
-			r32 rollDegrees = shipInput.inputs[ShipInput::ROLL] * shipConfig.rollRate * dt;
-
-			if(pitchDegrees != 0.0f || yawDegrees != 0.0f || rollDegrees != 0.0f)
-			{
-				Quaternion rotationDelta = QuaternionFromEuler(pitchDegrees * DEG2RAD, yawDegrees * DEG2RAD, rollDegrees * DEG2RAD);
-				transform.rotation = QuaternionMultiply(transform.rotation, rotationDelta);
-			}
+		auto shipView = m_registry.view<const ShipPhysics, Transform>();
+		shipView.each([this](const ShipPhysics &shipPhysics, Transform &transform) {
+			shipPhysics.FillTransform(transform);
 		});
 	}
 
@@ -319,7 +288,7 @@ void Game::UpdateAndDraw()
 
 		auto view = m_registry.view<const Transform, CameraArm, Camera>();
 		view.each([](const Transform &transform, CameraArm &cameraArm, Camera &camera) {
-			
+
 			if(!QuaternionEquals(cameraArm.currentRotation, transform.rotation))
 			{
 				constexpr r32 cameraLerpAmount = 0.08f;
@@ -336,44 +305,11 @@ void Game::UpdateAndDraw()
 			constexpr r32 inFrontAmount = 20.0f;
 			Vector3 inFrontOfBoat = Vector3Scale(transformFaceDir, inFrontAmount);
 			camera.target = Vector3Add(transform.translation, inFrontOfBoat);
-			
+
 		});
 	}
 
-	//// Move spheres around screen
-	//{
-	//	auto view = m_registry.view<Transform, Physics>();
-	//	view.each([this, dt](Transform &transform, Physics &physics) {
-	//		Vector3 &translation = transform.translation;
-	//		translation = Vector3Add(translation, Vector3Scale(physics.velocity, dt));
-
-	//		// After fully off screen, reset on other side it went off
-	//		const Vector3 &scale = transform.scale;
-	//		r32 resetXMin = -scale.x;
-	//		r32 resetXMax = m_windowWidth + scale.x;
-	//		r32 resetYMin = -scale.y;
-	//		r32 resetYMax = m_windowHeight + scale.y;
-
-	//		if(translation.x < resetXMin)
-	//		{
-	//			translation.x = resetXMax;
-	//		}
-	//		else if(translation.x > resetXMax)
-	//		{
-	//			translation.x = resetXMin;
-	//		}
-
-	//		if(translation.y < resetYMin)
-	//		{
-	//			translation.y = resetYMax;
-	//		}
-	//		else if(translation.y > resetYMax)
-	//		{
-	//			translation.y = resetYMin;
-	//		}
-	//	}); 
-	//}
-
+	
 	BeginDrawing();
 
 	ClearBackground(BLACK);
@@ -381,14 +317,15 @@ void Game::UpdateAndDraw()
 	const Camera &camera = m_registry.get<const Camera>(m_playerEntity);
 
 	BeginMode3D(camera);
+
 	// Draw asteroids
 	{
 		OPTICK_EVENT("Draw");
 		{
 			OPTICK_EVENT("DrawModels");
 
-			auto modelView = m_registry.view<const Transform, const Model>();
-			modelView.each([](const Transform &transform, const Model &model) {
+			auto modelView = m_registry.view<const Model, const Transform>();
+			modelView.each([](const Model &model, const Transform &transform) {
 				Vector3 rotationAxis = {0.0f, 0.0f, 0.0f};
 				r32 rotationAngle = 0.0f;
 				QuaternionToAxisAngle(transform.rotation, &rotationAxis, &rotationAngle);
@@ -398,24 +335,12 @@ void Game::UpdateAndDraw()
 			});
 		}
 
+		if(debugFlags.drawCollision)
 		{
-			if(debugFlags.drawCollision)
-			{
-				OPTICK_EVENT("DrawSphereCollision");
-				auto debugCollisionView = m_registry.view<const SphereCollision, const Transform>();
-				debugCollisionView.each([](const SphereCollision &sphereCollision, const Transform &transform)
-				{
-					constexpr u32 rings = 5;
-					constexpr u32 slices = 12;
-					Vector3 rotatedOffset = Vector3RotateByQuaternion(sphereCollision.offset, transform.rotation);
-					Vector3 position = Vector3Add(transform.translation, rotatedOffset);
-					DrawSphereWires(position, sphereCollision.radius, rings, slices, LIME);
-				});
-			}
+			m_physics->DrawDebugInfo();
 		}
 	}
 	EndMode3D();
-
 
 	DrawFPS(10, 10);
 

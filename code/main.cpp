@@ -5,8 +5,6 @@
 #include "raylib.h"
 #include "raymath.h"
 
-#include "optick/optick.h"
-
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
 #endif
@@ -19,7 +17,6 @@ static void UpdateAndDrawWeb(void *context)
 }
 #endif
 
-
 int main(void)
 {
 	OPTICK_START_CAPTURE();
@@ -28,16 +25,21 @@ int main(void)
 	
 	const u32 windowWidth = 1600;
 	const u32 windowHeight = 900;
+	{
+		OPTICK_EVENT("InitWindow");
 
-	InitWindow(windowWidth, windowHeight, "pineapple");
+		InitWindow(windowWidth, windowHeight, "pineapple");
 
-	SetWindowPosition(1000, 200); // TODO: DEBUG - Remove 
+		SetWindowPosition(1000, 200); // TODO: DEBUG - Remove 
 
-	constexpr s32 targetFPS = 60;
-	SetTargetFPS(targetFPS);
+		constexpr s32 targetFPS = 60;
+		SetTargetFPS(targetFPS);
+	}
 
-	InitAudioDevice();
-
+	{
+		OPTICK_EVENT("InitAudioDevice");
+		InitAudioDevice();
+	}
 	//Font font = LoadFont("mecha.png");
 
 	//Music music = LoadMusicStream("ambient.ogg");
