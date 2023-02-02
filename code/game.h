@@ -39,13 +39,24 @@ public:
 
 	void UpdateAndDraw();
 
+
+	void SpawnLaserbeam(void *data);
+
+	void AddEvent();
+
+	entt::registry & GetRegistry() { return m_registry; }
+	PhysicsWorld * const GetPhysics() { return m_physics; };
+
+	void SetCameraEntity(entt::entity entity) { m_cameraEntity = entity; }
+
 private:
-	void Load();
+	//void Load();
 
 	entt::registry m_registry;
 
 	std::vector<entt::entity> m_entities;
-	entt::entity m_playerEntity = entt::null;
+
+	entt::entity m_cameraEntity = entt::null;
 
 	PhysicsWorld *m_physics;
 
@@ -53,6 +64,33 @@ private:
 
 	u32 m_windowWidth = 0;
 	u32 m_windowHeight = 0;
+
+	
+	void *m_eventDataMemory = nullptr;
+	u32 m_eventDataMemoryUsed = 0;
+	u32 m_eventDataMemorySize = 0;
+
+	using EventDelegate = entt::delegate<void(void *)>;
+	struct Event
+	{
+		EventDelegate delegate;
+		void *data = nullptr; 
+	};
+	std::vector<Event> m_events;
+
+	template<typename T>
+	T *AllocEventData(Event &newEvent)
+	{
+		u32 dataSize = sizeof(T);
+		Assert((m_eventDataMemoryUsed + dataSize) <= m_eventDataMemorySize);
+		newEvent.data = (void *)((u8 *)m_eventDataMemory + m_eventDataMemoryUsed);
+		m_eventDataMemoryUsed += dataSize;
+		return (T *)newEvent.data;
+	}
+	
+	
+
+	
 
 
 	struct DebugFlags

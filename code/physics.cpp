@@ -2,6 +2,8 @@
 
 #include "game.h"
 
+#include "math.h"
+
 #include "btBulletDynamicsCommon.h"
 #include "BulletCollision/CollisionDispatch/btGhostObject.h"
 
@@ -16,13 +18,13 @@ class CollisionDrawer : public btIDebugDraw
 public:
 	void drawLine(const btVector3 &from, const btVector3 &to, const btVector3 &color) override
 	{
-		const Vector3 source = {from.getX(), from.getY(), from.getZ()};
-		const Vector3 dest = {to.getX(), to.getY(), to.getZ()};
-		Color colorInBytes;
+		const Raylib::Vector3 source = {from.getX(), from.getY(), from.getZ()};
+		const Raylib::Vector3 dest = {to.getX(), to.getY(), to.getZ()};
+		Raylib::Color colorInBytes;
 		colorInBytes.r = (u8)(color.getX() * 255.0f);
 		colorInBytes.g = (u8)(color.getY() * 255.0f); 
 		colorInBytes.b = (u8)(color.getZ() * 255.0f);
-		DrawLine3D(source, dest, colorInBytes);
+		Raylib::DrawLine3D(source, dest, colorInBytes);
 	}
 
 	void drawContactPoint(const btVector3 &PointOnB, const btVector3 &normalOnB, btScalar distance, int lifeTime, const btVector3 &color) override
@@ -30,7 +32,7 @@ public:
 
 	}
 
-	void reportErrorWarning(const char *warningString) override { TraceLog(LOG_ERROR, warningString); }
+	void reportErrorWarning(const char *warningString) override { Raylib::TraceLog(Raylib::LOG_ERROR, warningString); }
 
 	void draw3dText(const btVector3 &location, const char *textString) override
 	{
@@ -54,10 +56,10 @@ void PhysicsWorld::InitWorld()
 	m_world = new btDiscreteDynamicsWorld(m_dispatcher, m_broadphase, m_solver, m_collisionConfiguration);
 	
 	CollisionDrawer *m_debugDrawer = new CollisionDrawer();
-	//m_debugDrawer->setDebugMode(btIDebugDraw::DBG_DrawAabb);
+	m_debugDrawer->setDebugMode(btIDebugDraw::DBG_DrawAabb);
 	//m_debugDrawer->setDebugMode(btIDebugDraw::DBG_DrawContactPoints);
 	//m_debugDrawer->setDebugMode(btIDebugDraw::DBG_DrawWireframe);
-	m_debugDrawer->setDebugMode(btIDebugDraw::DBG_DrawAabb | btIDebugDraw::DBG_DrawWireframe);
+	//m_debugDrawer->setDebugMode(btIDebugDraw::DBG_DrawAabb | btIDebugDraw::DBG_DrawWireframe);
 	m_world->setDebugDrawer(m_debugDrawer);
 
 	m_world->setGravity(btVector3(0.0, 0.0, 0.0));
@@ -82,44 +84,20 @@ void PhysicsWorld::Step(r32 deltaTime)
 	m_world->stepSimulation(deltaTime);
 }
 
-inline void TransformToBtTransform(const Transform &tranform, btTransform &outBodyTransform)
-{
-	btVector3 origin(tranform.translation.x, tranform.translation.y, tranform.translation.z);
-	btQuaternion rotation(tranform.rotation.x, tranform.rotation.y, tranform.rotation.z, tranform.rotation.w);
-	outBodyTransform = btTransform(rotation, origin);
-}
-
-inline void BtTransformToTransform(const btTransform &bodyTranform, Transform &outTransform)
-{
-	btVector3 origin = bodyTranform.getOrigin();
-
-	outTransform.translation.x = origin.getX();
-	outTransform.translation.y = origin.getY();
-	outTransform.translation.z = origin.getZ();
-
-	//btQuaternion rotation = bodyTranform.getRotation();
-	//outTransform.rotation.x = rotation.getX();
-	//outTransform.rotation.y = rotation.getY();
-	//outTransform.rotation.z = rotation.getZ();
-	//outTransform.rotation.w = rotation.getW();
-}
-
-btPairCachingGhostObject *PhysicsWorld::CreateGhostObject(btConvexShape *collisionShape)
+btPairCachingGhostObject *PhysicsWorld::CreateGhostObject(btConvexShape *collisionShape, int filterGroup, int filterMask)
 {
 	btPairCachingGhostObject *ghostObject = new btPairCachingGhostObject();
 	ghostObject->setCollisionShape(collisionShape);
-	m_world->addCollisionObject(ghostObject);
+	m_world->addCollisionObject(ghostObject, filterGroup, filterMask);
 	return ghostObject;
 }
 
-RigidBody PhysicsWorld::CreateRigidBody(Vector3 position, Quaternion rotation, r32 mass, btConvexShape *collisionShape)
+RigidBody PhysicsWorld::CreateRigidBody(btVector3 position, btQuaternion rotation, r32 mass, btConvexShape *collisionShape)
 {
 	btVector3 bodyInertia;
 	collisionShape->calculateLocalInertia(mass, bodyInertia);
 
-	btQuaternion btRotation(rotation.x, rotation.y, rotation.z, rotation.w);
-	btVector3 btPosition(position.x, position.y, position.z);
-	btTransform startTransform(btRotation, btPosition);
+	btTransform startTransform(rotation, position);
 
 	btTransform centerOfMassOffset = btTransform::getIdentity();
 	btDefaultMotionState *motionState = new btDefaultMotionState(startTransform, centerOfMassOffset);
@@ -132,18 +110,6 @@ RigidBody PhysicsWorld::CreateRigidBody(Vector3 position, Quaternion rotation, r
 	m_world->addRigidBody(rigidBody.body);
 	return rigidBody;
 }
-
-
-void PhysicsWorld::UpdateTransform(const RigidBody &rigidBody, Transform &transform)
-{
-	btTransform bodyTransform = rigidBody.body->getWorldTransform();
-
-	Vector3 translationBefore = transform.translation;
-	Quaternion rotationBefore = transform.rotation;
-
-	BtTransformToTransform(bodyTransform, transform);
-}
-
 
 void PhysicsWorld::AddAction(btActionInterface *action)
 {
@@ -195,19 +161,19 @@ btConvexShape *CreateCylinderZAxisCollision(r32 radius, r32 length)
 	return collision;
 }
 
-btConvexShape * CreateConvexCollision(const Model &model, r32 scale)
+btConvexShape * CreateConvexCollision(const Raylib::Model &model, r32 scale)
 {
 	Assert(model.meshCount == 1);
-	Mesh *mesh = &model.meshes[0];
+	Raylib::Mesh *mesh = &model.meshes[0];
 
 	btConvexHullShape *collision = new btConvexHullShape();
 	
 	Assert(mesh->vertexCount > 0)
 
-	Vector3 *vertices = (Vector3 *)mesh->vertices;
+	Raylib::Vector3 *vertices = (Raylib::Vector3 *)mesh->vertices;
 	for(int vertexNum = 0; vertexNum < mesh->vertexCount; ++vertexNum)
 	{
-		Vector3 *vertex = &vertices[vertexNum];
+		Raylib::Vector3 *vertex = &vertices[vertexNum];
 		btVector3 btv = btVector3(vertex->x, vertex->y, vertex->z);
 		collision->addPoint(btv);
 	}

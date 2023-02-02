@@ -40,18 +40,22 @@ void ShipPhysics::updateAction(btCollisionWorld *collisionWorld, btScalar deltaT
 {
 	OPTICK_EVENT();
 
-	btVector3 thrustVector = m_thrustInput * m_shipConfig.thrustSpeed;
-
-	btVector3 targetPosition = m_position + (m_velocity * deltaTimeStep);
-	btVector3 targetVelocity = m_velocity + (thrustVector * deltaTimeStep);
-
 	r32 pitchRadians = m_rotationInput.getX() * m_shipConfig.pitchRate * DEG2RAD * deltaTimeStep;
 	r32 yawRadians = m_rotationInput.getY() * m_shipConfig.yawRate * DEG2RAD * deltaTimeStep;
 	r32 rollRadians = m_rotationInput.getZ() * m_shipConfig.rollRate * DEG2RAD * deltaTimeStep;
 
-	btQuaternion rotationQuat(yawRadians, pitchRadians, rollRadians);
-	btQuaternion targetRotation = m_rotation * rotationQuat;
+	btQuaternion rotationDelta(yawRadians, pitchRadians, rollRadians);
+	btQuaternion targetRotation = m_rotation * rotationDelta;
 
+	btVector3 rotatedVelocity = quatRotate(m_rotation, m_velocity);
+	btVector3 targetPosition = m_position + (rotatedVelocity * deltaTimeStep);
+
+	// Friction forces to any velocity other than foward of back
+	m_velocity *= btVector3(0.95f, 0.95f, 0.99f); // TODO: need to be improved how I handle this
+
+	// Add acceleration/thrust
+	btVector3 thrustVector = m_thrustInput * m_shipConfig.thrustSpeed * deltaTimeStep;
+	btVector3 targetVelocity = m_velocity + thrustVector;
 
 
 	btCollisionWorld::ClosestConvexResultCallback sweepResultCallback(btVector3(0.0f, 0.0f, 0.0f), btVector3(0.0f, 0.0f, 0.0f));
@@ -67,7 +71,6 @@ void ShipPhysics::updateAction(btCollisionWorld *collisionWorld, btScalar deltaT
 	end.setOrigin(targetPosition);
 	end.setRotation(targetRotation);
 
-
 	collisionWorld->convexSweepTest(m_convexShape, start, end, sweepResultCallback, collisionWorld->getDispatchInfo().m_allowedCcdPenetration);
 
 	if(sweepResultCallback.hasHit() && m_ghostObject->hasContactResponse() && CollisionMasksCollides(m_ghostObject, sweepResultCallback.m_hitCollisionObject))
@@ -81,21 +84,11 @@ void ShipPhysics::updateAction(btCollisionWorld *collisionWorld, btScalar deltaT
 			btVector3 reflectDir = ComputeReflectionDirection(movementDirection, sweepResultCallback.m_hitNormalWorld);
 			reflectDir.normalize();
 
-			//btVector3 parallelDir = ParallelComponent(reflectDir, sweepResultCallback.m_hitNormalWorld);
-			//btVector3 perpindicularDir = PerpindicularComponent(reflectDir, sweepResultCallback.m_hitNormalWorld);
-
-			btScalar hitFract = sweepResultCallback.m_closestHitFraction;
-			btScalar remainingFract = 1.0f - hitFract;
-
-			//targetPosition = m_position + (hitFract * movementDirection);// + (reflectDir * remainingFract);
-
 			btScalar velocityTotal = targetVelocity.length();
 
 			btScalar collisionSlowdownFract = btFabs(movementDirection.dot(sweepResultCallback.m_hitNormalWorld));
 			btScalar slowDownAmount = velocityTotal * collisionSlowdownFract;
-			//targetVelocity = reflectDir * 0.0f;
 			targetVelocity = reflectDir * (velocityTotal - slowDownAmount);
-
 
 			btScalar impulseOnOtherObject = (collisionSlowdownFract);
 			if(sweepResultCallback.m_hitCollisionObject->getInternalType() == btCollisionObject::CO_RIGID_BODY)
@@ -126,6 +119,10 @@ void ShipPhysics::updateAction(btCollisionWorld *collisionWorld, btScalar deltaT
 
 void ShipPhysics::debugDraw(btIDebugDraw *debugDrawer)
 {
+	btVector3 rotatedVelocity = quatRotate(m_rotation, m_velocity);
+	btVector3 relVelocity = m_position + rotatedVelocity;
+
+	debugDrawer->drawLine(m_position, relVelocity, btVector3(0.0f, 1.0f, 0.0f));
 }
 
 void ShipPhysics::ApplyShipInput(const ShipInput &shipInput)
@@ -137,7 +134,6 @@ void ShipPhysics::ApplyShipInput(const ShipInput &shipInput)
 	if(thrustX != 0.0f || thrustY != 0.0f || thrustZ != 0.0f)
 	{
 		m_thrustInput = btVector3(thrustX, thrustY, thrustZ).normalize();
-		m_thrustInput = quatRotate(m_rotation, m_thrustInput);
 	}
 
 	// Rotation
@@ -150,14 +146,15 @@ void ShipPhysics::ApplyShipInput(const ShipInput &shipInput)
 	}
 }
 
-void ShipPhysics::FillTransform(Transform &transform) const
+Transform ShipPhysics::GetTransform() const
 {
-	transform.translation.x = m_position.getX();
-	transform.translation.y = m_position.getY();
-	transform.translation.z = m_position.getZ();
+	Transform transform;
+	transform.translation = m_position;
+	transform.rotation = m_rotation;
+	return transform;
+}
 
-	transform.rotation.x = m_rotation.getX();
-	transform.rotation.y = m_rotation.getY();
-	transform.rotation.z = m_rotation.getZ();
-	transform.rotation.w = m_rotation.getW();
+btVector3 ShipPhysics::GetVelocity() const
+{
+	return m_velocity;
 }

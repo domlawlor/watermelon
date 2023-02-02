@@ -109,6 +109,7 @@
     <ClInclude Include="code\external\optick\optick_serialization.h" />
     <ClInclude Include="code\external\optick\optick_server.h" />
     <ClInclude Include="code\game.h" />
+    <ClInclude Include="code\math.h" />
     <ClInclude Include="code\physics.h" />
     <ClInclude Include="code\shipPhysics.h" />
     <ClInclude Include="external\bullet3\headers\btBulletCollisionCommon.h">
@@ -1844,6 +1845,7 @@
     <ClCompile Include="code\external\optick\optick_server.cpp" />
     <ClCompile Include="code\game.cpp" />
     <ClCompile Include="code\main.cpp" />
+    <ClCompile Include="code\math.cpp" />
     <ClCompile Include="code\physics.cpp" />
     <ClCompile Include="code\shipPhysics.cpp" />
     <ClCompile Include="external\bullet3\headers\btBulletCollisionAll.cpp">

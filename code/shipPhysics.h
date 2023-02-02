@@ -3,6 +3,7 @@
 #include "defines.h"
 
 #include "game.h"
+#include "math.h"
 
 #include "BulletDynamics/Dynamics/btActionInterface.h"
 
@@ -29,8 +30,8 @@ public:
 	ShipConfig GetShipConfig() { return m_shipConfig; };
 	void SetShipConfig(const ShipConfig &shipConfig) { m_shipConfig = shipConfig; };
 
-	void FillTransform(Transform &transform) const;
-
+	Transform GetTransform() const;
+	btVector3 GetVelocity() const;
 private:
 	btConvexShape *m_convexShape = nullptr;
 	btPairCachingGhostObject *m_ghostObject = nullptr;

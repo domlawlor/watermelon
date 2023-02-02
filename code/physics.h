@@ -2,10 +2,14 @@
 
 #include "defines.h"
 
+#include "math.h"
+
 #include "raylib.h"
 
 #include <vector>
 
+#include "LinearMath/btVector3.h"
+#include "LinearMath/btQuaternion.h"
 
 class btDefaultCollisionConfiguration;
 class btCollisionDispatcher;
@@ -36,11 +40,10 @@ public:
 
 	void Step(r32 deltaTime);
 
-	btPairCachingGhostObject *CreateGhostObject(btConvexShape *collisionShape);
+	btPairCachingGhostObject *CreateGhostObject(btConvexShape *collisionShape, int filterGroup, int filterMask);
 
-	RigidBody CreateRigidBody(Vector3 position, Quaternion rotation, r32 mass, btConvexShape *collisionShape);
-	void UpdateTransform(const RigidBody &rigidBody, Transform &transform);
-	
+	RigidBody CreateRigidBody(btVector3 position, btQuaternion rotation, r32 mass, btConvexShape *collisionShape);
+
 	void AddAction(btActionInterface *action);
 
 	void DrawDebugInfo();
@@ -70,4 +73,4 @@ btConvexShape *CreateCylinderYAxisCollision(r32 radius, r32 length);
 btConvexShape *CreateCylinderZAxisCollision(r32 radius, r32 length);
 
 
-btConvexShape * CreateConvexCollision(const Model &model, r32 scale);
+btConvexShape * CreateConvexCollision(const Raylib::Model &model, r32 scale);
